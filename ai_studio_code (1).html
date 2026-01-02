@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Delivery Partner App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>body { font-family: 'Roboto', sans-serif; background: #111827; color: white; }</style>
+</head>
+<body>
+
+    <!-- PIN Login -->
+    <div id="login-screen" class="min-h-screen flex flex-col items-center justify-center p-6">
+        <h1 class="text-3xl font-bold mb-8 text-yellow-400">PARTNER LOGIN</h1>
+        <input type="password" id="pin-input" placeholder="Enter PIN" class="text-center text-3xl tracking-widest bg-gray-800 border-2 border-gray-600 rounded-lg p-4 mb-6 w-full max-w-xs text-white focus:border-yellow-400 outline-none">
+        <button onclick="verifyPin()" class="w-full max-w-xs bg-yellow-400 text-black font-bold text-xl py-4 rounded-lg hover:bg-yellow-300">GO ONLINE</button>
+    </div>
+
+    <!-- Dashboard -->
+    <div id="dashboard" class="hidden min-h-screen pb-20">
+        <!-- Header -->
+        <header class="bg-gray-800 p-4 flex justify-between items-center shadow-lg">
+            <div>
+                <h2 class="text-xl font-bold" id="partner-name">...</h2>
+                <div class="flex items-center mt-1">
+                    <div id="status-indicator" class="w-3 h-3 bg-red-500 rounded-full mr-2"></div>
+                    <span class="text-sm text-gray-400" id="status-text">OFFLINE</span>
+                </div>
+            </div>
+            <button onclick="toggleOnline()" id="toggle-btn" class="bg-green-600 px-4 py-2 rounded font-bold text-sm">GO ONLINE</button>
+        </header>
+
+        <!-- Earnings -->
+        <div class="grid grid-cols-2 gap-4 p-4">
+            <div class="bg-gray-800 p-4 rounded-lg text-center">
+                <p class="text-gray-400 text-xs uppercase">Orders</p>
+                <p class="text-2xl font-bold text-white" id="orders-count">0</p>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-lg text-center">
+                <p class="text-gray-400 text-xs uppercase">Earnings</p>
+                <p class="text-2xl font-bold text-green-400">₹<span id="earnings-total">0</span></p>
+            </div>
+        </div>
+
+        <!-- Active Order -->
+        <div class="px-4">
+            <h3 class="text-gray-400 text-sm font-bold mb-2 uppercase">Current Assignment</h3>
+            <div id="no-order-msg" class="text-gray-500 text-center py-10 border-2 border-dashed border-gray-700 rounded-lg">
+                Waiting for orders...
+            </div>
+            
+            <div id="active-order-card" class="hidden bg-white text-black rounded-xl overflow-hidden shadow-2xl">
+                <div class="bg-yellow-400 p-3 flex justify-between items-center">
+                    <span class="font-bold">NEW ORDER</span>
+                    <span class="bg-black text-white text-xs px-2 py-1 rounded" id="order-id">#123</span>
+                </div>
+                <div class="p-4">
+                    <h2 class="text-2xl font-bold mb-1" id="vendor-name">Restaurant Name</h2>
+                    <p class="text-gray-600 text-sm mb-4">Pickup Address</p>
+                    
+                    <div class="border-t border-b py-3 my-3">
+                        <div class="flex justify-between font-bold text-lg">
+                            <span>Total Bill</span>
+                            <span id="order-amount">₹0</span>
+                        </div>
+                        <p class="text-gray-500 text-sm mt-1" id="customer-name">Customer Name</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3 mt-4">
+                        <a id="maps-link" href="#" target="_blank" class="flex items-center justify-center bg-blue-100 text-blue-700 font-bold py-3 rounded-lg">
+                            <i class="fas fa-location-arrow mr-2"></i> Navigate
+                        </a>
+                        <button onclick="updateStatus()" id="action-btn" class="bg-gray-900 text-white font-bold py-3 rounded-lg">
+                            Picked Up
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getDatabase, ref, get, set, update, onValue } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD7csSkAFgTlWTPCvEXCPUfc1AA50HHz1c",
+            authDomain: "ritam-2d2df.firebaseapp.com",
+            databaseURL: "https://ritam-2d2df-default-rtdb.firebaseio.com",
+            projectId: "ritam-2d2df",
+            messagingSenderId: "754157553570",
+            appId: "1:754157553570:web:8f0b6fd43b663e06bfd4fb"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        let currentPartnerId = null;
+        let watchId = null;
+        let isOnline = false;
+        let currentOrder = null;
+
+        window.verifyPin = async () => {
+            const pin = document.getElementById('pin-input').value;
+            const snap = await get(ref(db, 'deliveryPartners'));
+            const partners = snap.val() || {};
+            
+            const match = Object.entries(partners).find(([id, data]) => data.pin === pin);
+            
+            if (match) {
+                currentPartnerId = match[0];
+                document.getElementById('partner-name').innerText = match[1].name;
+                document.getElementById('login-screen').classList.add('hidden');
+                document.getElementById('dashboard').classList.remove('hidden');
+                listenToAssignments();
+            } else {
+                alert("Invalid PIN");
+            }
+        };
+
+        window.toggleOnline = () => {
+            isOnline = !isOnline;
+            const btn = document.getElementById('toggle-btn');
+            const statusDiv = document.getElementById('status-indicator');
+            const statusTxt = document.getElementById('status-text');
+
+            if (isOnline) {
+                btn.innerText = "GO OFFLINE";
+                btn.classList.replace('bg-green-600', 'bg-red-600');
+                statusDiv.classList.replace('bg-red-500', 'bg-green-500');
+                statusTxt.innerText = "ONLINE & TRACKING";
+                startGPS();
+            } else {
+                btn.innerText = "GO ONLINE";
+                btn.classList.replace('bg-red-600', 'bg-green-600');
+                statusDiv.classList.replace('bg-green-500', 'bg-red-500');
+                statusTxt.innerText = "OFFLINE";
+                stopGPS();
+            }
+            update(ref(db, `deliveryPartners/${currentPartnerId}`), { isOnline });
+        };
+
+        function startGPS() {
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition((pos) => {
+                    update(ref(db, `liveLocations/${currentPartnerId}`), {
+                        lat: pos.coords.latitude,
+                        lng: pos.coords.longitude,
+                        timestamp: Date.now()
+                    });
+                }, null, { enableHighAccuracy: true });
+            }
+        }
+
+        function stopGPS() {
+            if (watchId) navigator.geolocation.clearWatch(watchId);
+        }
+
+        function listenToAssignments() {
+            const ordersRef = ref(db, 'orders');
+            onValue(ordersRef, (snap) => {
+                const orders = snap.val() || {};
+                // Find active order assigned to this partner not yet delivered
+                const active = Object.entries(orders).find(([id, o]) => 
+                    o.deliveryPartnerId === currentPartnerId && o.status !== 'Delivered'
+                );
+
+                if (active) {
+                    currentOrder = { id: active[0], ...active[1] };
+                    renderOrderCard(currentOrder);
+                } else {
+                    document.getElementById('active-order-card').classList.add('hidden');
+                    document.getElementById('no-order-msg').classList.remove('hidden');
+                    currentOrder = null;
+                }
+
+                // Calc Earnings (simple logic)
+                const completed = Object.values(orders).filter(o => o.deliveryPartnerId === currentPartnerId && o.status === 'Delivered');
+                document.getElementById('orders-count').innerText = completed.length;
+                document.getElementById('earnings-total').innerText = completed.length * 40; // Flat 40rs per order
+            });
+        }
+
+        function renderOrderCard(order) {
+            document.getElementById('no-order-msg').classList.add('hidden');
+            const card = document.getElementById('active-order-card');
+            card.classList.remove('hidden');
+            
+            document.getElementById('order-id').innerText = '#' + order.id.slice(-4);
+            document.getElementById('vendor-name').innerText = order.vendorName;
+            document.getElementById('customer-name').innerText = order.userName;
+            document.getElementById('order-amount').innerText = '₹' + order.total;
+            
+            // Map Link
+            const mapLink = `https://www.google.com/maps/search/?api=1&query=${order.vendorName}`; // Ideally use Lat/Lng
+            document.getElementById('maps-link').href = mapLink;
+
+            const btn = document.getElementById('action-btn');
+            if(order.status === 'Accepted' || order.status === 'Preparing') {
+                btn.innerText = "Picked Up";
+                btn.onclick = () => updateOrderStatus('On The Way');
+            } else if (order.status === 'On The Way') {
+                btn.innerText = "Mark Delivered";
+                btn.className = "bg-green-600 text-white font-bold py-3 rounded-lg";
+                btn.onclick = () => updateOrderStatus('Delivered');
+            }
+        }
+
+        window.updateOrderStatus = (status) => {
+            if(!currentOrder) return;
+            update(ref(db, `orders/${currentOrder.id}`), { status });
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Panel</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 h-screen flex overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-900 text-white flex flex-col">
+        <div class="h-16 flex items-center justify-center text-xl font-bold border-b border-gray-700">
+            ADMIN PANEL
+        </div>
+        <nav class="flex-1 p-4 space-y-2">
+            <button onclick="showSection('orders')" class="w-full text-left px-4 py-3 rounded hover:bg-gray-800 bg-gray-800 text-yellow-400">
+                <i class="fas fa-list mr-2"></i> Live Orders
+            </button>
+            <button onclick="showSection('vendors')" class="w-full text-left px-4 py-3 rounded hover:bg-gray-800">
+                <i class="fas fa-store mr-2"></i> Vendors & Food
+            </button>
+            <button onclick="showSection('partners')" class="w-full text-left px-4 py-3 rounded hover:bg-gray-800">
+                <i class="fas fa-motorcycle mr-2"></i> Delivery Partners
+            </button>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 flex flex-col overflow-hidden">
+        <header class="h-16 bg-white shadow flex items-center px-6 justify-between">
+            <h2 class="text-xl font-bold text-gray-800" id="page-title">Live Orders</h2>
+            <div class="text-sm text-green-600 font-bold flex items-center">
+                <div class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></div> System Live
+            </div>
+        </header>
+
+        <div class="flex-1 overflow-auto p-6" id="content-area">
+            <!-- Order Section -->
+            <div id="section-orders">
+                <div class="bg-white rounded-lg shadow overflow-hidden">
+                    <table class="min-w-full">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Vendor</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="orders-table" class="divide-y divide-gray-200"></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Vendors Section -->
+            <div id="section-vendors" class="hidden space-y-6">
+                <!-- Add Vendor -->
+                <div class="bg-white p-4 rounded shadow">
+                    <h3 class="font-bold mb-2">Add New Vendor</h3>
+                    <div class="grid grid-cols-4 gap-4">
+                        <input id="v-name" type="text" placeholder="Name" class="border p-2 rounded">
+                        <input id="v-img" type="text" placeholder="Image URL" class="border p-2 rounded">
+                        <button onclick="addVendor()" class="bg-blue-600 text-white rounded">Add Vendor</button>
+                    </div>
+                </div>
+                <!-- Add Food -->
+                <div class="bg-white p-4 rounded shadow">
+                    <h3 class="font-bold mb-2">Add Food Item</h3>
+                    <div class="grid grid-cols-5 gap-4">
+                        <select id="f-vendor" class="border p-2 rounded"></select>
+                        <input id="f-name" type="text" placeholder="Food Name" class="border p-2 rounded">
+                        <input id="f-price" type="number" placeholder="Price" class="border p-2 rounded">
+                        <input id="f-img" type="text" placeholder="Image URL" class="border p-2 rounded">
+                        <button onclick="addFood()" class="bg-green-600 text-white rounded">Add Food</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Partners Section -->
+            <div id="section-partners" class="hidden">
+                <div class="bg-white p-4 rounded shadow mb-6">
+                    <h3 class="font-bold mb-2">Create Partner PIN</h3>
+                    <div class="flex gap-4">
+                        <input id="p-name" type="text" placeholder="Partner Name" class="border p-2 rounded">
+                        <input id="p-pin" type="text" placeholder="4 Digit PIN" class="border p-2 rounded">
+                        <button onclick="addPartner()" class="bg-purple-600 text-white px-4 rounded">Create</button>
+                    </div>
+                </div>
+                <div class="bg-white rounded shadow p-4">
+                    <h3 class="font-bold mb-4">Active Partners</h3>
+                    <ul id="partners-list" class="space-y-2"></ul>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getDatabase, ref, push, set, onValue, update } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD7csSkAFgTlWTPCvEXCPUfc1AA50HHz1c",
+            authDomain: "ritam-2d2df.firebaseapp.com",
+            databaseURL: "https://ritam-2d2df-default-rtdb.firebaseio.com",
+            projectId: "ritam-2d2df",
+            messagingSenderId: "754157553570",
+            appId: "1:754157553570:web:8f0b6fd43b663e06bfd4fb"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+
+        // --- Navigation ---
+        window.showSection = (id) => {
+            ['orders', 'vendors', 'partners'].forEach(s => document.getElementById(`section-${s}`).classList.add('hidden'));
+            document.getElementById(`section-${id}`).classList.remove('hidden');
+        };
+
+        // --- Orders Logic ---
+        onValue(ref(db, 'orders'), (snap) => {
+            const orders = snap.val() || {};
+            const tbody = document.getElementById('orders-table');
+            tbody.innerHTML = '';
+
+            Object.entries(orders).sort((a,b) => b.val.timestamp - a.val.timestamp).forEach(([key, order]) => {
+                let actionBtn = '';
+                if(order.status === 'Placed') {
+                    actionBtn = `<button onclick="updateStatus('${key}', 'Accepted')" class="text-blue-600 font-bold hover:underline">Accept</button>`;
+                } else if (order.status === 'Accepted' && !order.deliveryPartnerId) {
+                    actionBtn = `
+                        <select onchange="assignPartner('${key}', this.value)" class="border rounded text-sm p-1">
+                            <option>Assign Driver</option>
+                            ${generateDriverOptions()}
+                        </select>
+                    `;
+                }
+
+                tbody.innerHTML += `
+                    <tr>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">#${key.slice(-4)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${order.vendorName}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">${order.status}</span></td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${actionBtn}</td>
+                    </tr>
+                `;
+            });
+        });
+
+        window.updateStatus = (id, status) => update(ref(db, `orders/${id}`), { status });
+        
+        window.assignPartner = (orderId, partnerId) => {
+            update(ref(db, `orders/${orderId}`), { 
+                deliveryPartnerId: partnerId,
+                status: 'Accepted' // Keep accepted until driver picks up
+            });
+        };
+
+        // --- Vendor/Food Logic ---
+        window.addVendor = () => {
+            const newRef = push(ref(db, 'vendors'));
+            set(newRef, {
+                name: document.getElementById('v-name').value,
+                image: document.getElementById('v-img').value,
+                enabled: true
+            });
+            alert('Vendor Added');
+        };
+
+        // Populate Vendor Dropdown
+        let vendorList = {};
+        onValue(ref(db, 'vendors'), (snap) => {
+            vendorList = snap.val() || {};
+            const select = document.getElementById('f-vendor');
+            select.innerHTML = '';
+            Object.entries(vendorList).forEach(([key, val]) => {
+                select.innerHTML += `<option value="${key}">${val.name}</option>`;
+            });
+        });
+
+        window.addFood = () => {
+            const newRef = push(ref(db, 'foods'));
+            set(newRef, {
+                vendorId: document.getElementById('f-vendor').value,
+                name: document.getElementById('f-name').value,
+                price: parseInt(document.getElementById('f-price').value),
+                image: document.getElementById('f-img').value,
+                category: 'General',
+                available: true
+            });
+            alert('Food Added');
+        };
+
+        // --- Partner Logic ---
+        let drivers = {};
+        onValue(ref(db, 'deliveryPartners'), (snap) => {
+            drivers = snap.val() || {};
+            const list = document.getElementById('partners-list');
+            list.innerHTML = '';
+            Object.entries(drivers).forEach(([key, val]) => {
+                list.innerHTML += `
+                    <li class="flex justify-between border-b py-2">
+                        <span>${val.name} (PIN: ${val.pin})</span>
+                        <span class="${val.isOnline ? 'text-green-600' : 'text-gray-400'} font-bold">${val.isOnline ? 'Online' : 'Offline'}</span>
+                    </li>
+                `;
+            });
+        });
+
+        function generateDriverOptions() {
+            // Helper for Select Dropdown
+            return Object.entries(drivers)
+                .filter(([k, v]) => v.isOnline)
+                .map(([k, v]) => `<option value="${k}">${v.name}</option>`)
+                .join('');
+        }
+
+        window.addPartner = () => {
+            const newRef = push(ref(db, 'deliveryPartners'));
+            set(newRef, {
+                name: document.getElementById('p-name').value,
+                pin: document.getElementById('p-pin').value,
+                isOnline: false
+            });
+            alert('Partner Created');
+        };
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ZomatoClone - User</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background: #f4f5f8; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .bottom-nav-item.active { color: #e23744; }
+        .food-card img { object-fit: cover; height: 160px; width: 100%; border-radius: 12px; }
+        .loader { border-top-color: #e23744; -webkit-animation: spinner 1.5s linear infinite; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #map { height: 300px; width: 100%; border-radius: 12px; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800 pb-20">
+
+    <!-- Auth Screen -->
+    <div id="auth-screen" class="fixed inset-0 bg-white z-50 flex flex-col items-center justify-center p-6 text-center">
+        <img src="https://upload.wikimedia.org/wikipedia/commons/b/bd/Firebase_Logo.png" class="w-24 mb-6">
+        <h1 class="text-3xl font-bold mb-2 text-gray-900">Hungry?</h1>
+        <p class="text-gray-500 mb-8">Order food from the best restaurants.</p>
+        <button onclick="googleLogin()" class="flex items-center bg-white border border-gray-300 shadow-md px-6 py-3 rounded-full text-lg font-medium active:scale-95 transition">
+            <img src="https://www.svgrepo.com/show/475656/google-color.svg" class="w-6 h-6 mr-3">
+            Continue with Google
+        </button>
+    </div>
+
+    <!-- Main App -->
+    <div id="app-screen" class="hidden">
+        <!-- Header -->
+        <header class="sticky top-0 bg-white shadow-sm z-40 px-4 py-3 flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="fas fa-map-marker-alt text-[#e23744] text-xl mr-2"></i>
+                <div>
+                    <h2 class="font-bold text-sm">Home</h2>
+                    <p class="text-xs text-gray-500 truncate w-40" id="user-location-text">Detecting location...</p>
+                </div>
+            </div>
+            <img id="user-avatar" src="" class="w-8 h-8 rounded-full border">
+        </header>
+
+        <!-- Views -->
+        <main id="home-view" class="p-4 space-y-6">
+            <!-- Search -->
+            <div class="relative">
+                <i class="fas fa-search absolute left-3 top-3 text-gray-400"></i>
+                <input type="text" placeholder="Restaurant name, cuisine, or a dish..." class="w-full bg-white border-none shadow-sm rounded-lg py-3 pl-10 pr-4 focus:ring-1 focus:ring-red-400 outline-none">
+            </div>
+
+            <!-- Categories / Vendors -->
+            <div>
+                <h3 class="font-bold text-lg mb-3">Restaurants Near You</h3>
+                <div id="vendor-list" class="space-y-4"></div>
+            </div>
+        </main>
+
+        <main id="orders-view" class="hidden p-4 space-y-4">
+            <h2 class="text-2xl font-bold">Your Orders</h2>
+            <div id="order-history-list" class="space-y-4 pb-20"></div>
+        </main>
+
+        <main id="profile-view" class="hidden p-4 text-center">
+            <img id="profile-pic-large" src="" class="w-24 h-24 rounded-full mx-auto mb-4 border-4 border-white shadow-lg">
+            <h2 id="profile-name" class="text-2xl font-bold"></h2>
+            <p id="profile-email" class="text-gray-500 mb-6"></p>
+            <button onclick="logout()" class="w-full bg-gray-200 text-gray-800 py-3 rounded-xl font-bold">Log Out</button>
+        </main>
+
+        <!-- Floating Cart Button -->
+        <div id="cart-float" class="fixed bottom-20 left-4 right-4 bg-[#e23744] text-white p-4 rounded-xl shadow-xl flex justify-between items-center hidden z-40 cursor-pointer" onclick="openCartModal()">
+            <div class="flex flex-col">
+                <span class="font-bold text-sm" id="cart-count">0 ITEMS</span>
+                <span class="font-bold text-lg" id="cart-total">₹0</span>
+            </div>
+            <div class="flex items-center font-bold text-sm">
+                View Cart <i class="fas fa-chevron-right ml-2"></i>
+            </div>
+        </div>
+
+        <!-- Bottom Nav -->
+        <nav class="fixed bottom-0 w-full bg-white border-t flex justify-around py-3 z-50 pb-safe">
+            <button onclick="switchTab('home')" class="bottom-nav-item active flex flex-col items-center w-1/3" id="nav-home">
+                <i class="fas fa-home text-xl mb-1"></i>
+                <span class="text-xs font-medium">Delivery</span>
+            </button>
+            <button onclick="switchTab('orders')" class="bottom-nav-item text-gray-400 flex flex-col items-center w-1/3" id="nav-orders">
+                <i class="fas fa-receipt text-xl mb-1"></i>
+                <span class="text-xs font-medium">Orders</span>
+            </button>
+            <button onclick="switchTab('profile')" class="bottom-nav-item text-gray-400 flex flex-col items-center w-1/3" id="nav-profile">
+                <i class="fas fa-user text-xl mb-1"></i>
+                <span class="text-xs font-medium">Profile</span>
+            </button>
+        </nav>
+    </div>
+
+    <!-- Cart Modal -->
+    <div id="cart-modal" class="fixed inset-0 bg-black bg-opacity-50 z-[60] hidden flex items-end">
+        <div class="bg-white w-full rounded-t-2xl p-6 max-h-[80vh] overflow-y-auto slide-up-anim">
+            <div class="flex justify-between items-center mb-4">
+                <h2 class="text-xl font-bold">Your Cart</h2>
+                <button onclick="closeCartModal()" class="text-gray-500"><i class="fas fa-times text-xl"></i></button>
+            </div>
+            <div id="cart-items" class="space-y-4 mb-6"></div>
+            <div class="border-t pt-4 mb-4">
+                <div class="flex justify-between text-lg font-bold">
+                    <span>To Pay</span>
+                    <span id="modal-total">₹0</span>
+                </div>
+            </div>
+            <button onclick="placeOrder()" class="w-full bg-[#e23744] text-white py-4 rounded-xl font-bold text-lg shadow-lg">Place Order</button>
+        </div>
+    </div>
+
+    <!-- Live Tracking Modal -->
+    <div id="tracking-modal" class="fixed inset-0 bg-white z-[70] hidden overflow-y-auto">
+        <div class="p-4">
+            <button onclick="closeTracking()" class="absolute top-4 left-4 bg-white p-2 rounded-full shadow-md z-10"><i class="fas fa-arrow-left"></i></button>
+            <div id="map"></div>
+            <div class="mt-6">
+                <h2 class="text-2xl font-bold mb-1">Order Status</h2>
+                <p id="track-status" class="text-[#e23744] font-bold text-lg mb-4">Preparing...</p>
+                <div class="bg-gray-50 p-4 rounded-xl border mb-4">
+                    <p class="text-sm text-gray-500">Order ID</p>
+                    <p id="track-id" class="font-mono font-bold">#</p>
+                </div>
+                <!-- Delivery Partner Info -->
+                <div id="partner-info" class="hidden flex items-center bg-green-50 p-4 rounded-xl border border-green-100">
+                    <div class="w-12 h-12 bg-green-200 rounded-full flex items-center justify-center text-green-700 font-bold mr-3">DP</div>
+                    <div>
+                        <p class="font-bold text-green-900" id="partner-name">Partner Assigned</p>
+                        <p class="text-xs text-green-700">Delivery Partner</p>
+                    </div>
+                    <a href="tel:+" class="ml-auto bg-white p-2 rounded-full shadow-sm"><i class="fas fa-phone text-green-600"></i></a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase & Logic -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-auth.js";
+        import { getDatabase, ref, onValue, push, set, update } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyD7csSkAFgTlWTPCvEXCPUfc1AA50HHz1c",
+            authDomain: "ritam-2d2df.firebaseapp.com",
+            databaseURL: "https://ritam-2d2df-default-rtdb.firebaseio.com",
+            projectId: "ritam-2d2df",
+            messagingSenderId: "754157553570",
+            appId: "1:754157553570:web:8f0b6fd43b663e06bfd4fb"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getDatabase(app);
+        const provider = new GoogleAuthProvider();
+
+        let currentUser = null;
+        let cart = [];
+        let map, userMarker, driverMarker;
+
+        // Auth Logic
+        window.googleLogin = () => signInWithPopup(auth, provider);
+        window.logout = () => signOut(auth);
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('app-screen').classList.remove('hidden');
+                document.getElementById('user-avatar').src = user.photoURL;
+                document.getElementById('profile-pic-large').src = user.photoURL;
+                document.getElementById('profile-name').innerText = user.displayName;
+                document.getElementById('profile-email').innerText = user.email;
+                
+                // Save user to DB
+                update(ref(db, 'users/' + user.uid), {
+                    name: user.displayName,
+                    email: user.email,
+                    lastLogin: Date.now()
+                });
+
+                detectLocation();
+                loadVendorsAndFood();
+                listenToOrders();
+            } else {
+                document.getElementById('auth-screen').classList.remove('hidden');
+                document.getElementById('app-screen').classList.add('hidden');
+            }
+        });
+
+        // Location
+        function detectLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition((position) => {
+                    const { latitude, longitude } = position.coords;
+                    document.getElementById('user-location-text').innerText = `${latitude.toFixed(4)}, ${longitude.toFixed(4)}`;
+                    update(ref(db, 'users/' + currentUser.uid), { lat: latitude, lng: longitude });
+                });
+            }
+        }
+
+        // Data Loading
+        function loadVendorsAndFood() {
+            onValue(ref(db, 'vendors'), (vSnap) => {
+                const vendors = vSnap.val() || {};
+                onValue(ref(db, 'foods'), (fSnap) => {
+                    const foods = fSnap.val() || {};
+                    renderHome(vendors, foods);
+                });
+            });
+        }
+
+        function renderHome(vendors, foods) {
+            const container = document.getElementById('vendor-list');
+            container.innerHTML = '';
+            
+            Object.keys(vendors).forEach(vid => {
+                const vendor = vendors[vid];
+                if(!vendor.enabled) return;
+
+                const vendorFoods = Object.keys(foods).filter(fid => foods[fid].vendorId === vid && foods[fid].available);
+                if(vendorFoods.length === 0) return;
+
+                let foodHtml = '';
+                vendorFoods.forEach(fid => {
+                    const item = foods[fid];
+                    foodHtml += `
+                        <div class="flex justify-between items-start py-4 border-b last:border-0">
+                            <div class="w-2/3 pr-2">
+                                <h4 class="font-bold text-gray-800">${item.name}</h4>
+                                <p class="text-sm text-gray-500 mb-1">${item.category}</p>
+                                <p class="font-bold text-gray-900">₹${item.price}</p>
+                            </div>
+                            <div class="relative w-1/3">
+                                <img src="${item.image}" class="w-full h-24 rounded-lg object-cover bg-gray-200">
+                                <button onclick="addToCart('${fid}', '${item.name}', ${item.price}, '${vid}', '${vendor.name}')" class="absolute -bottom-2 left-1/2 transform -translate-x-1/2 bg-white text-[#e23744] font-bold text-xs px-4 py-2 rounded shadow border uppercase">
+                                    ADD
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                container.innerHTML += `
+                    <div class="bg-white p-4 rounded-xl shadow-sm mb-4">
+                        <div class="flex items-center mb-4">
+                            <img src="${vendor.image}" class="w-12 h-12 rounded-lg mr-3 object-cover">
+                            <div>
+                                <h3 class="font-bold text-lg">${vendor.name}</h3>
+                                <p class="text-xs text-gray-500">Fast Delivery • 4.5 <i class="fas fa-star text-yellow-400"></i></p>
+                            </div>
+                        </div>
+                        <div class="pl-2">${foodHtml}</div>
+                    </div>
+                `;
+            });
+        }
+
+        // Cart Logic
+        window.addToCart = (id, name, price, vId, vName) => {
+            // Simple logic: Allow only 1 vendor at a time
+            if (cart.length > 0 && cart[0].vendorId !== vId) {
+                if(!confirm("Start fresh? You can only order from one restaurant at a time.")) return;
+                cart = [];
+            }
+            cart.push({ id, name, price, vendorId: vId, vendorName: vName });
+            updateCartUI();
+        }
+
+        function updateCartUI() {
+            const total = cart.reduce((sum, item) => sum + item.price, 0);
+            document.getElementById('cart-count').innerText = `${cart.length} ITEMS`;
+            document.getElementById('cart-total').innerText = `₹${total}`;
+            document.getElementById('cart-float').classList.toggle('hidden', cart.length === 0);
+        }
+
+        window.openCartModal = () => {
+            const container = document.getElementById('cart-items');
+            container.innerHTML = cart.map(item => `
+                <div class="flex justify-between">
+                    <span>${item.name}</span>
+                    <span>₹${item.price}</span>
+                </div>
+            `).join('');
+            document.getElementById('modal-total').innerText = document.getElementById('cart-total').innerText;
+            document.getElementById('cart-modal').classList.remove('hidden');
+        }
+
+        window.closeCartModal = () => document.getElementById('cart-modal').classList.add('hidden');
+
+        window.placeOrder = () => {
+            if(cart.length === 0) return;
+            const orderRef = push(ref(db, 'orders'));
+            const total = cart.reduce((sum, item) => sum + item.price, 0);
+            
+            set(orderRef, {
+                userId: currentUser.uid,
+                userName: currentUser.displayName,
+                vendorId: cart[0].vendorId,
+                vendorName: cart[0].vendorName,
+                items: cart,
+                total: total,
+                status: 'Placed',
+                timestamp: Date.now()
+            });
+
+            cart = [];
+            updateCartUI();
+            closeCartModal();
+            switchTab('orders');
+            alert("Order Placed Successfully!");
+        }
+
+        // Orders & Tracking
+        function listenToOrders() {
+            const ordersRef = ref(db, 'orders');
+            onValue(ordersRef, (snapshot) => {
+                const data = snapshot.val() || {};
+                const list = document.getElementById('order-history-list');
+                list.innerHTML = '';
+                
+                // Filter client side for simplicity
+                const myOrders = Object.entries(data).filter(([key, val]) => val.userId === currentUser.uid).sort((a,b) => b.val.timestamp - a.val.timestamp);
+
+                myOrders.forEach(([key, order]) => {
+                    const statusColor = order.status === 'Delivered' ? 'text-green-600' : 'text-[#e23744]';
+                    list.innerHTML += `
+                        <div class="bg-white p-4 rounded-xl shadow-sm border-l-4 ${order.status === 'Delivered' ? 'border-green-500' : 'border-[#e23744]'}">
+                            <div class="flex justify-between mb-2">
+                                <h3 class="font-bold text-lg">${order.vendorName}</h3>
+                                <span class="text-xs font-bold bg-gray-100 px-2 py-1 rounded">${order.status}</span>
+                            </div>
+                            <p class="text-gray-500 text-sm mb-2">${order.items.map(i => i.name).join(', ')}</p>
+                            <div class="flex justify-between items-center mt-3">
+                                <span class="font-bold">₹${order.total}</span>
+                                ${order.status !== 'Delivered' ? `<button onclick="trackOrder('${key}')" class="text-[#e23744] text-sm font-bold uppercase">Track Order</button>` : ''}
+                            </div>
+                        </div>
+                    `;
+                });
+            });
+        }
+
+        window.trackOrder = (orderId) => {
+            document.getElementById('tracking-modal').classList.remove('hidden');
+            document.getElementById('track-id').innerText = `#${orderId.substring(orderId.length - 6)}`;
+            
+            // Listen to specific order
+            onValue(ref(db, 'orders/' + orderId), (snap) => {
+                const order = snap.val();
+                document.getElementById('track-status').innerText = order.status;
+                
+                if(order.deliveryPartnerId) {
+                    document.getElementById('partner-info').classList.remove('hidden');
+                    trackPartnerLocation(order.deliveryPartnerId);
+                }
+            });
+
+            initMap();
+        }
+
+        window.closeTracking = () => document.getElementById('tracking-modal').classList.add('hidden');
+
+        function trackPartnerLocation(partnerId) {
+             onValue(ref(db, 'liveLocations/' + partnerId), (snap) => {
+                 const loc = snap.val();
+                 if(loc && map) {
+                     const pos = { lat: loc.lat, lng: loc.lng };
+                     if(!driverMarker) {
+                         driverMarker = new google.maps.Marker({ position: pos, map: map, icon: 'http://maps.google.com/mapfiles/kml/shapes/motorcycling.png' });
+                     } else {
+                         driverMarker.setPosition(pos);
+                     }
+                     map.panTo(pos);
+                 }
+             });
+        }
+
+        function initMap() {
+            // Placeholder map init - requires API Key
+            if(typeof google !== 'undefined') {
+                map = new google.maps.Map(document.getElementById("map"), {
+                    center: { lat: 20.5937, lng: 78.9629 },
+                    zoom: 15,
+                    disableDefaultUI: true
+                });
+            }
+        }
+
+        // Navigation
+        window.switchTab = (tab) => {
+            document.querySelectorAll('main').forEach(el => el.classList.add('hidden'));
+            document.getElementById(`${tab}-view`).classList.remove('hidden');
+            document.querySelectorAll('.bottom-nav-item').forEach(el => {
+                el.classList.remove('active', 'text-[#e23744]');
+                el.classList.add('text-gray-400');
+            });
+            const activeBtn = document.getElementById(`nav-${tab}`);
+            activeBtn.classList.add('active', 'text-[#e23744]');
+            activeBtn.classList.remove('text-gray-400');
+        }
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=YOUR_GOOGLE_MAPS_API_KEY&callback=initMap"></script>
+</body>
+</html>
